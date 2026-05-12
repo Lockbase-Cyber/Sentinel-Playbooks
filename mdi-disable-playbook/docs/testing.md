@@ -151,7 +151,7 @@ The implementation work (Tasks 1–11) was completed unattended on this date. Ta
 Before wiring an Automation Rule against any production-scope Sentinel incidents, run the full E2E exactly once in the sandbox. The steps below assume the operator is logged into the sandbox subscription and has `Contributor` on the target resource group.
 
 1. **Replace `REPLACE_ME` markers** in `infra/parameters/dev.parameters.json` (subscription ID, resource group, workspace resource ID, bootstrap UAMI resource ID if using the deploymentScript path).
-2. **Replace `<OWNER>`** in `mdi-disable-playbook/README.md`'s Deploy-to-Azure badge URL with the GitHub org/user once the repo is published.
+2. **Verify the Deploy-to-Azure badge URL** in `mdi-disable-playbook/README.md` points at the correct fork (currently `Lockbase-Cyber/Sentinel-Playbooks` on `main`). If you forked elsewhere, update accordingly.
 3. **Configure GitHub OIDC federation** per [README — GitHub Actions deploy](../README.md) (Entra app, federated credentials for `main` branch and `pull_request`, Contributor on the RG).
 4. **Set GitHub repo variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `RESOURCE_GROUP_NAME`.
 5. **Trigger the `Deploy` workflow** with `workflow_dispatch` → environment `dev`. Confirm post-deploy verification prints `State: Enabled` and outputs the MI principal ID.

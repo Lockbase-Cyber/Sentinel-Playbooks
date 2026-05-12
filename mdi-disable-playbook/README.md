@@ -36,9 +36,9 @@ Reference docs used to design this:
 
 ## Deploy to Azure (one-click)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2F<OWNER>%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json)
 
-> **Note**: replace `<OWNER>` in the badge URL above with the GitHub org/user that hosts the fork before publishing. The button will 404 until that is done.
+> **Note**: the badge above points at `Lockbase-Cyber/Sentinel-Playbooks` on the `main` branch. If you fork to a different org, edit this URL accordingly.
 
 The Azure portal renders a form from `infra/main.json`'s parameters.
 
@@ -83,7 +83,7 @@ az deployment group show -g <RG> -n <DEPLOYMENT-NAME> \
 In Azure Cloud Shell (bash), signed in as a Privileged Role Administrator or Global Admin:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/<OWNER>/Sentinel-Playbooks/main/mdi-disable-playbook/scripts/grant-graph-permissions.sh \
+curl -sSL https://raw.githubusercontent.com/Lockbase-Cyber/Sentinel-Playbooks/main/mdi-disable-playbook/scripts/grant-graph-permissions.sh \
   -o grant-graph-permissions.sh && chmod +x grant-graph-permissions.sh
 ./grant-graph-permissions.sh <MI_PRINCIPAL_ID>
 ```
