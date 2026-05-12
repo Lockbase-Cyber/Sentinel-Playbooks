@@ -1,0 +1,99 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mdi-disable-playbook/infra/**'
+      - 'mdi-disable-playbook/.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [ dev, prod ]
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    defaults:
+      run:
+        working-directory: mdi-disable-playbook
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Azure CLI
+        uses: azure/setup-azure-cli@v2
+
+      - name: Re-build main.json (fail fast if drifted from committed)
+        run: |
+          set -e
+          az bicep build --file infra/main.bicep --outfile /tmp/main.fresh.json
+          jq -S . infra/main.json     > /tmp/committed.norm.json
+          jq -S . /tmp/main.fresh.json > /tmp/fresh.norm.json
+          if ! diff -q /tmp/committed.norm.json /tmp/fresh.norm.json > /dev/null; then
+            echo "::error::infra/main.json drifted from main.bicep. PR validation should have caught this."
+            exit 1
+          fi
+
+      - name: Resolve parameters file
+        id: params
+        run: |
+          env_name="${{ inputs.environment || 'dev' }}"
+          echo "file=infra/parameters/${env_name}.parameters.json" >> "$GITHUB_OUTPUT"
+
+      - name: Deployment what-if
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ vars.RESOURCE_GROUP_NAME }}" \
+            --template-file infra/main.json \
+            --parameters @${{ steps.params.outputs.file }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          az deployment group create \
+            --resource-group "${{ vars.RESOURCE_GROUP_NAME }}" \
+            --template-file infra/main.json \
+            --parameters @${{ steps.params.outputs.file }} \
+            --name "mdi-disable-$(date -u +%Y%m%d%H%M%S)" \
+            --query "properties.outputs" -o json | tee deploy-outputs.json
+
+      - name: Post-deploy verification
+        run: |
+          logic_app_name=$(jq -r '.logicAppName.value' deploy-outputs.json)
+          mi_principal_id=$(jq -r '.managedIdentityPrincipalId.value' deploy-outputs.json)
+
+          state=$(az logic workflow show \
+            --resource-group "${{ vars.RESOURCE_GROUP_NAME }}" \
+            --name "$logic_app_name" \
+            --query state -o tsv)
+
+          echo "Logic App: $logic_app_name"
+          echo "MI principal ID: $mi_principal_id"
+          echo "State: $state"
+
+          if [ "$state" != "Enabled" ]; then
+            echo "::error::Logic App state is $state, expected Enabled"
+            exit 1
+          fi
+
+      - name: Upload compiled ARM template
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-arm-${{ github.run_number }}
+          path: mdi-disable-playbook/infra/main.json
