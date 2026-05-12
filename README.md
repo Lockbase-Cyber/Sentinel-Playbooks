@@ -6,7 +6,7 @@ A collection of Microsoft Sentinel playbooks deployed as Logic Apps via Bicep + 
 
 | Playbook | Trigger | Purpose |
 |---|---|---|
-| [mdi-disable-playbook](./mdi-disable-playbook) | Sentinel incident | Disable on-prem AD account and/or force password reset via MDI Action Account |
+| [mdi-disable-playbook](./mdi-disable-playbook) | Sentinel incident | Disable on-prem AD account and/or force password reset via MDI Action Account. [Architecture](./mdi-disable-playbook/docs/architecture.md) · [Permissions](./mdi-disable-playbook/docs/permissions.md) · [Testing](./mdi-disable-playbook/docs/testing.md) |
 
 ## Conventions
 
