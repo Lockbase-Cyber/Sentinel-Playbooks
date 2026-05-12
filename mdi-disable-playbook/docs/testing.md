@@ -139,4 +139,36 @@ Then immediately re-run `test-invoke.ps1` to confirm the SID still resolves in M
 
 ## Smoke test results
 
-_To be populated by Task 12 when the sandbox E2E is run._
+### 2026-05-12 — Not yet executed
+
+The implementation work (Tasks 1–11) was completed unattended on this date. Task 12's end-to-end smoke test was **not** run, for two reasons:
+
+1. **Authentication.** `az login` requires interactive sign-in (device code or browser) and cannot be performed unattended without a service principal — and the whole point of this playbook is to deploy *without* SP secrets, so we don't want one.
+2. **Destructive operations gated.** The project-scoped `.claude/settings.local.json` denies `az deployment group create`, `az rest --method POST/PUT/DELETE`, `az identity create`, and `az role assignment create` so that no live Azure mutation happens without explicit operator approval.
+
+### Operator checklist on return
+
+Before wiring an Automation Rule against any production-scope Sentinel incidents, run the full E2E exactly once in the sandbox. The steps below assume the operator is logged into the sandbox subscription and has `Contributor` on the target resource group.
+
+1. **Replace `REPLACE_ME` markers** in `infra/parameters/dev.parameters.json` (subscription ID, resource group, workspace resource ID, bootstrap UAMI resource ID if using the deploymentScript path).
+2. **Replace `<OWNER>`** in `mdi-disable-playbook/README.md`'s Deploy-to-Azure badge URL with the GitHub org/user once the repo is published.
+3. **Configure GitHub OIDC federation** per [README — GitHub Actions deploy](../README.md) (Entra app, federated credentials for `main` branch and `pull_request`, Contributor on the RG).
+4. **Set GitHub repo variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `RESOURCE_GROUP_NAME`.
+5. **Trigger the `Deploy` workflow** with `workflow_dispatch` → environment `dev`. Confirm post-deploy verification prints `State: Enabled` and outputs the MI principal ID.
+6. **Grant Graph permissions** to the Logic App MI via `scripts/grant-graph-permissions.sh` in Cloud Shell (or `.ps1` locally). Verify with:
+   ```bash
+   az rest --method GET \
+     --uri "https://graph.microsoft.com/v1.0/servicePrincipals/<MI_PRINCIPAL_ID>/appRoleAssignments"
+   ```
+   Expect both `SecurityIdentitiesAccount.Read.All` and `SecurityIdentitiesUserActions.ReadWrite.All` in the response.
+7. **Assign MDI URBAC role** in the Defender portal per [permissions.md](./permissions.md). Wait ~5 minutes for propagation.
+8. **Run `test-invoke.ps1`** against a known test SID:
+   ```powershell
+   pwsh -File mdi-disable-playbook/scripts/test-invoke.ps1 -TestSid "S-1-5-21-...-1234"
+   ```
+   Confirm the response shape matches what the workflow expects.
+9. **Fire the synthetic incident** via Path A or Path B above. Verify all four checks under "Verification" (run history, incident comment, Defender Action Center, on-prem AD).
+10. **Rollback** the test account per the Rollback section.
+11. **Record results here.** Replace this checklist with the actual run log, including: sandbox subscription ID, test user identifier (no SID in the committed log — PII), date/time, run-trace branch hit (`BySid` / `ByAad`), Action Center actor + verbs, on-prem AD state delta.
+
+Until this section is updated with a real run log, **do not** wire an Automation Rule to non-test analytics rules.
