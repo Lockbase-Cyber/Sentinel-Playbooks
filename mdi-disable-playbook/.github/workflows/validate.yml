@@ -1,0 +1,65 @@
+name: Validate (PR)
+
+on:
+  pull_request:
+    paths:
+      - 'mdi-disable-playbook/infra/**'
+      - 'mdi-disable-playbook/.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mdi-disable-playbook
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate workflow.json schema
+        shell: pwsh
+        run: |
+          pwsh -File infra/workflow/schema-validate.ps1
+
+      - name: Set up Azure CLI (for bicep)
+        uses: azure/setup-azure-cli@v2
+
+      - name: Bicep build (treat warnings as errors) to a scratch path
+        run: |
+          set -e
+          tmp_err=$(mktemp)
+          az bicep build --file infra/main.bicep --outfile /tmp/main.fresh.json 2> "$tmp_err"
+          if [ -s "$tmp_err" ]; then
+            echo "bicep build emitted warnings/errors:" >&2
+            cat "$tmp_err" >&2
+            exit 1
+          fi
+
+      - name: Drift check (committed main.json matches main.bicep)
+        run: |
+          set -e
+          # Normalize both files via jq so trivial whitespace differences don't fail us.
+          jq -S . infra/main.json     > /tmp/committed.norm.json
+          jq -S . /tmp/main.fresh.json > /tmp/fresh.norm.json
+          if ! diff -u /tmp/committed.norm.json /tmp/fresh.norm.json; then
+            echo "::error::infra/main.json is out of date. Run 'az bicep build --file infra/main.bicep --outdir infra' locally and commit the result."
+            exit 1
+          fi
+          # Make the fresh build the artifact for arm-ttk to consume.
+          cp /tmp/main.fresh.json infra/main.json
+
+      - name: arm-ttk
+        uses: Azure/arm-ttk-action@v1
+        with:
+          path: mdi-disable-playbook/infra/main.json
+
+      - name: Lint parameter files
+        shell: pwsh
+        run: |
+          Get-ChildItem infra/parameters/*.json | ForEach-Object {
+            $null = Get-Content $_ -Raw | ConvertFrom-Json -Depth 50
+            Write-Host "$($_.Name): OK"
+          }

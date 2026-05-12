@@ -1,0 +1,12 @@
+# NOTE: infra/main.json IS committed (it's the Deploy-to-Azure button target).
+# CI enforces it stays in sync with main.bicep via the drift check in validate.yml.
+
+# Local Azure CLI artifacts
+.azure/
+*.deployment.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
