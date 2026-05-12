@@ -1,0 +1,390 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "defaultValue": {}
+      },
+      "actionsToEnable": {
+        "type": "Array",
+        "defaultValue": [ "disable", "forcePasswordReset" ],
+        "metadata": {
+          "description": "Subset of [\"disable\",\"forcePasswordReset\"] to execute per matched identity."
+        }
+      },
+      "graphBaseUrl": {
+        "type": "String",
+        "defaultValue": "https://graph.microsoft.com/beta/security/identities/identityAccounts",
+        "metadata": {
+          "description": "Pinned Graph endpoint base. Change here to cut beta over to v1.0 once GA."
+        }
+      }
+    },
+    "triggers": {
+      "Microsoft_Sentinel_incident": {
+        "type": "ApiConnectionWebhook",
+        "inputs": {
+          "body": {
+            "callback_url": "@{listCallbackUrl()}"
+          },
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+            }
+          },
+          "path": "/incident-creation"
+        }
+      }
+    },
+    "actions": {
+      "Initialize_actionResults": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "actionResults",
+              "type": "Array",
+              "value": []
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Initialize_matchesScratch": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "matchesScratch",
+              "type": "Array",
+              "value": []
+            }
+          ]
+        },
+        "runAfter": { "Initialize_actionResults": [ "Succeeded" ] }
+      },
+      "Entities_-_Get_Accounts": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+            }
+          },
+          "method": "post",
+          "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+          "path": "/entities/account"
+        },
+        "runAfter": {
+          "Initialize_matchesScratch": [ "Succeeded" ]
+        }
+      },
+      "For_each_account": {
+        "type": "Foreach",
+        "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+        "actions": {
+          "Compose_sid": {
+            "type": "Compose",
+            "inputs": "@coalesce(items('For_each_account')?['Sid'], '')"
+          },
+          "Compose_aadUserId": {
+            "type": "Compose",
+            "inputs": "@coalesce(items('For_each_account')?['AadUserId'], '')",
+            "runAfter": { "Compose_sid": [ "Succeeded" ] }
+          },
+          "Check_identifier_present": {
+            "type": "If",
+            "expression": {
+              "or": [
+                { "not": { "equals": [ "@outputs('Compose_sid')", "" ] } },
+                { "not": { "equals": [ "@outputs('Compose_aadUserId')", "" ] } }
+              ]
+            },
+            "actions": {
+              "Switch_match_strategy": {
+                "type": "Switch",
+                "expression": "@if(not(equals(outputs('Compose_sid'),'')), 'sid', 'aad')",
+                "cases": {
+                  "BySid": {
+                    "case": "sid",
+                    "actions": {
+                      "List_identityAccounts_by_sid": {
+                        "type": "Http",
+                        "inputs": {
+                          "method": "GET",
+                          "uri": "@{parameters('graphBaseUrl')}",
+                          "queries": {
+                            "$filter": "@{concat('onPremisesSecurityIdentifier eq ''', outputs('Compose_sid'), '''')}",
+                            "$select": "id,displayName,domain,onPremisesSecurityIdentifier,accounts"
+                          },
+                          "authentication": {
+                            "type": "ManagedServiceIdentity",
+                            "audience": "https://graph.microsoft.com"
+                          }
+                        },
+                        "runAfter": {},
+                        "retryPolicy": {
+                          "type": "exponential",
+                          "count": 3,
+                          "interval": "PT30S",
+                          "minimumInterval": "PT10S",
+                          "maximumInterval": "PT2M"
+                        }
+                      },
+                      "Set_matches_from_sid": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "matchesScratch",
+                          "value": "@body('List_identityAccounts_by_sid')?['value']"
+                        },
+                        "runAfter": { "List_identityAccounts_by_sid": [ "Succeeded" ] }
+                      }
+                    }
+                  },
+                  "ByAad": {
+                    "case": "aad",
+                    "actions": {
+                      "List_identityAccounts_unfiltered": {
+                        "description": "AAD-fallback: no server-side filter for AadUserId is documented. Fetches a page; for tenants with >100 identityAccounts the workflow MUST be extended to follow @odata.nextLink. Acceptable for v1 against small/mid tenants.",
+                        "type": "Http",
+                        "inputs": {
+                          "method": "GET",
+                          "uri": "@{parameters('graphBaseUrl')}",
+                          "queries": {
+                            "$select": "id,displayName,domain,onPremisesSecurityIdentifier,accounts",
+                            "$top": "999"
+                          },
+                          "authentication": {
+                            "type": "ManagedServiceIdentity",
+                            "audience": "https://graph.microsoft.com"
+                          }
+                        },
+                        "runAfter": {},
+                        "retryPolicy": {
+                          "type": "exponential",
+                          "count": 3,
+                          "interval": "PT30S",
+                          "minimumInterval": "PT10S",
+                          "maximumInterval": "PT2M"
+                        }
+                      },
+                      "Filter_aad_subaccount_match": {
+                        "description": "Keep identityAccounts where any sub-account is provider==EntraID with identifier matching the AadUserId from the incident entity.",
+                        "type": "Query",
+                        "inputs": {
+                          "from": "@body('List_identityAccounts_unfiltered')?['value']",
+                          "where": "@greater(length(filter(coalesce(item()?['accounts'], json('[]')), and(equals(item()?['provider'], 'EntraID'), equals(item()?['identifier'], outputs('Compose_aadUserId'))))), 0)"
+                        },
+                        "runAfter": { "List_identityAccounts_unfiltered": [ "Succeeded" ] }
+                      },
+                      "Set_matches_from_aad": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "matchesScratch",
+                          "value": "@body('Filter_aad_subaccount_match')"
+                        },
+                        "runAfter": { "Filter_aad_subaccount_match": [ "Succeeded" ] }
+                      }
+                    }
+                  }
+                },
+                "default": { "actions": {} },
+                "runAfter": {}
+              },
+              "Filter_matches": {
+                "type": "Compose",
+                "inputs": "@variables('matchesScratch')",
+                "runAfter": { "Switch_match_strategy": [ "Succeeded" ] }
+              },
+              "Switch_on_match_count": {
+                "type": "Switch",
+                "expression": "@length(outputs('Filter_matches'))",
+                "cases": {
+                  "ExactlyOne": {
+                    "case": 1,
+                    "actions": {
+                      "Compose_identityAccountId": {
+                        "type": "Compose",
+                        "inputs": "@outputs('Filter_matches')[0]?['id']"
+                      },
+                      "Filter_AD_subaccount": {
+                        "type": "Query",
+                        "inputs": {
+                          "from": "@outputs('Filter_matches')[0]?['accounts']",
+                          "where": "@equals(item()?['provider'], 'ActiveDirectory')"
+                        },
+                        "runAfter": { "Compose_identityAccountId": [ "Succeeded" ] }
+                      },
+                      "Check_AD_subaccount_present": {
+                        "type": "If",
+                        "expression": {
+                          "greater": [ "@length(body('Filter_AD_subaccount'))", 0 ]
+                        },
+                        "actions": {
+                          "For_each_action": {
+                            "type": "Foreach",
+                            "foreach": "@parameters('actionsToEnable')",
+                            "actions": {
+                              "Invoke_action": {
+                                "type": "Http",
+                                "inputs": {
+                                  "method": "POST",
+                                  "uri": "@{concat(parameters('graphBaseUrl'), '/', outputs('Compose_identityAccountId'), '/invokeAction')}",
+                                  "headers": { "Content-Type": "application/json" },
+                                  "body": {
+                                    "accountId": "@{body('Filter_AD_subaccount')[0]?['identifier']}",
+                                    "action": "@{items('For_each_action')}",
+                                    "identityProvider": "activeDirectory"
+                                  },
+                                  "authentication": {
+                                    "type": "ManagedServiceIdentity",
+                                    "audience": "https://graph.microsoft.com"
+                                  }
+                                },
+                                "retryPolicy": {
+                                  "type": "exponential",
+                                  "count": 3,
+                                  "interval": "PT30S",
+                                  "minimumInterval": "PT10S",
+                                  "maximumInterval": "PT2M"
+                                }
+                              },
+                              "Append_action_result": {
+                                "type": "AppendToArrayVariable",
+                                "inputs": {
+                                  "name": "actionResults",
+                                  "value": {
+                                    "identityAccountId": "@{outputs('Compose_identityAccountId')}",
+                                    "action": "@{items('For_each_action')}",
+                                    "status": "@{outputs('Invoke_action')['statusCode']}",
+                                    "result": "ok"
+                                  }
+                                },
+                                "runAfter": { "Invoke_action": [ "Succeeded" ] }
+                              },
+                              "Append_action_failure": {
+                                "type": "AppendToArrayVariable",
+                                "inputs": {
+                                  "name": "actionResults",
+                                  "value": {
+                                    "identityAccountId": "@{outputs('Compose_identityAccountId')}",
+                                    "action": "@{items('For_each_action')}",
+                                    "status": "@{coalesce(outputs('Invoke_action')?['statusCode'], 0)}",
+                                    "result": "failed"
+                                  }
+                                },
+                                "runAfter": { "Invoke_action": [ "Failed", "TimedOut", "Skipped" ] }
+                              }
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {
+                            "Append_no_AD_subaccount": {
+                              "type": "AppendToArrayVariable",
+                              "inputs": {
+                                "name": "actionResults",
+                                "value": {
+                                  "identityAccountId": "@{outputs('Compose_identityAccountId')}",
+                                  "result": "skipped: no ActiveDirectory sub-account on identityAccount"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "runAfter": { "Filter_AD_subaccount": [ "Succeeded" ] }
+                      }
+                    }
+                  },
+                  "NoMatch": {
+                    "case": 0,
+                    "actions": {
+                      "Append_no_match": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "actionResults",
+                          "value": {
+                            "result": "skipped: MDI has not observed this identity"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "default": {
+                  "actions": {
+                    "Append_ambiguous": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "actionResults",
+                        "value": {
+                          "matchCount": "@{length(outputs('Filter_matches'))}",
+                          "result": "skipped: multiple identityAccounts matched, refusing to act"
+                        }
+                      }
+                    }
+                  }
+                },
+                "runAfter": { "Filter_matches": [ "Succeeded" ] }
+              }
+            },
+            "else": {
+              "actions": {
+                "Append_no_identifier": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "actionResults",
+                    "value": { "result": "skipped: no usable identifier (Sid or AadUserId) on account entity" }
+                  }
+                }
+              }
+            },
+            "runAfter": { "Compose_aadUserId": [ "Succeeded" ] }
+          }
+        },
+        "runAfter": {
+          "Entities_-_Get_Accounts": [ "Succeeded" ]
+        }
+      },
+      "Compose_comment_markdown": {
+        "type": "Compose",
+        "inputs": "@{concat('**MDI playbook results**\n\n```json\n', string(variables('actionResults')), '\n```')}",
+        "runAfter": { "For_each_account": [ "Succeeded" ] }
+      },
+      "Add_comment_to_incident": {
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+            }
+          },
+          "method": "post",
+          "body": { "message": "@outputs('Compose_comment_markdown')" },
+          "path": "/Incidents/Comment",
+          "queries": {
+            "incidentArmId": "@triggerBody()?['object']?['id']"
+          }
+        },
+        "runAfter": { "Compose_comment_markdown": [ "Succeeded" ] }
+      }
+    },
+    "outputs": {}
+  },
+  "parameters": {
+    "$connections": {
+      "value": {
+        "azuresentinel": {
+          "connectionId": "",
+          "connectionName": "azuresentinel",
+          "id": "",
+          "connectionProperties": {
+            "authentication": { "type": "ManagedServiceIdentity" }
+          }
+        }
+      }
+    }
+  }
+}
