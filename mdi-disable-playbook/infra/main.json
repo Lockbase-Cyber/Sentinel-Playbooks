@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "6950389709136962013"
+      "templateHash": "17232840269987193379"
     }
   },
   "parameters": {
@@ -92,7 +92,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "5306394098915261419"
+              "templateHash": "9774337561868263883"
             }
           },
           "parameters": {
@@ -619,7 +619,7 @@
           "resources": [
             {
               "type": "Microsoft.Web/connections",
-              "apiVersion": "2018-07-01-preview",
+              "apiVersion": "2016-06-01",
               "name": "[format('{0}-azuresentinel', parameters('logicAppName'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
@@ -699,7 +699,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.43.8.12551",
-                      "templateHash": "13478468001933032790"
+                      "templateHash": "6254202754203236254"
                     }
                   },
                   "parameters": {
@@ -733,7 +733,7 @@
                   "resources": [
                     {
                       "type": "Microsoft.Web/connections/accessPolicies",
-                      "apiVersion": "2018-07-01-preview",
+                      "apiVersion": "2016-06-01",
                       "name": "[format('{0}/{1}', parameters('connectionName'), parameters('principalId'))]",
                       "location": "[parameters('location')]",
                       "properties": {

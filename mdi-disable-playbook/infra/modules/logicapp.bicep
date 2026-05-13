@@ -26,20 +26,26 @@ var sentinelManagedApiId = subscriptionResourceId(
 
 // API connection for Sentinel with managed-identity auth.
 //
-// The Sentinel managed API rejects connections that set BOTH
-// 'parameterValueType: Alternative' AND 'parameterValueSet' — it returns
-// InvalidApiConnectionApiReference at deploy time. We use the canonical
-// Microsoft-published Sentinel playbook shape: parameterValueType +
-// empty customParameterValues, no parameterValueSet.
-#disable-next-line BCP081
-resource sentinelConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
+// apiVersion is pinned to 2016-06-01 because Microsoft's own Sentinel
+// playbook samples (Azure/Azure-Sentinel and Azure/Microsoft-Defender-for-Cloud
+// repos) use exactly this version. The 2018-07-01-preview version validated
+// the connection differently and returned InvalidApiConnectionApiReference
+// at deploy time even with the same property shape.
+//
+// Bicep's static type catalog for 2016-06-01 doesn't include 'kind' or
+// 'parameterValueType' on this resource (it's an old API surface that the
+// type generator didn't fully cover), so BCP037/BCP187 warnings are spurious.
+// The runtime accepts these properties — verified against the published samples.
+resource sentinelConnection 'Microsoft.Web/connections@2016-06-01' = {
   name: '${logicAppName}-azuresentinel'
   location: location
   tags: tags
+  #disable-next-line BCP187
   kind: 'V1'
   properties: {
     displayName: '${logicAppName} Sentinel (MI)'
     customParameterValues: {}
+    #disable-next-line BCP037
     parameterValueType: 'Alternative'
     api: {
       id: sentinelManagedApiId
