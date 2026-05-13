@@ -1,0 +1,166 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Deploys a Microsoft Sentinel playbook (Azure Logic App) that disables on-prem AD accounts and/or forces password resets via the Microsoft Defender for Identity Action Account (gMSA). [Documentation](https://github.com/Lockbase-Cyber/Sentinel-Playbooks/tree/main/mdi-disable-playbook)."
+      }
+    },
+    "basics": [
+      {
+        "name": "intro",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "Pick the Log Analytics workspace that Microsoft Sentinel is onboarded to. All other parameters have sensible defaults — review them on the next page if you want to customize.",
+          "style": "Info"
+        }
+      },
+      {
+        "name": "sentinelWorkspace",
+        "type": "Microsoft.Solutions.ResourceSelector",
+        "label": "Sentinel workspace",
+        "toolTip": "The Log Analytics workspace that Microsoft Sentinel is configured on. The Logic App's managed identity will be granted Sentinel Responder on this workspace's resource group.",
+        "resourceType": "Microsoft.OperationalInsights/workspaces",
+        "options": {
+          "filter": {
+            "subscription": "onBasics",
+            "location": "all"
+          }
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "playbookSettings",
+        "label": "Playbook settings",
+        "elements": [
+          {
+            "name": "settingsInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "All fields on this page are optional. Defaults are production-sane: both actions enabled, Logic App name auto-generated, Graph permissions granted post-deploy via Cloud Shell script (no bootstrap MI required).",
+              "style": "Info"
+            }
+          },
+          {
+            "name": "logicAppName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Logic App name (optional)",
+            "defaultValue": "",
+            "toolTip": "Leave blank to auto-generate as 'pa-mdi-disable-<8-char-hash>'. If provided, must be 1-64 characters, alphanumeric and hyphens.",
+            "constraints": {
+              "required": false,
+              "validations": [
+                {
+                  "regex": "^$|^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}[a-zA-Z0-9]$",
+                  "message": "1-64 characters, alphanumeric and hyphens, must start and end with alphanumeric."
+                }
+              ]
+            },
+            "visible": true
+          },
+          {
+            "name": "actionsToEnable",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Actions to enable per matched identity",
+            "defaultValue": [
+              "Disable AD account",
+              "Force password reset"
+            ],
+            "toolTip": "Both actions enabled by default. At least one must be selected.",
+            "multiselect": true,
+            "selectAll": false,
+            "filter": false,
+            "multiLine": true,
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Disable AD account",
+                  "value": "disable",
+                  "description": "Disable the on-prem AD account via MDI Action Account."
+                },
+                {
+                  "label": "Force password reset",
+                  "value": "forcePasswordReset",
+                  "description": "Force password reset at next logon via MDI Action Account."
+                }
+              ],
+              "required": true
+            },
+            "visible": true
+          },
+          {
+            "name": "advancedSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Advanced",
+            "elements": [
+              {
+                "name": "advancedInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Warning",
+                  "text": "Only change these if you understand the trade-offs. The default Graph-permission strategy (post-deploy script) requires zero pre-provisioning. The 'deploymentScripts' strategy is fully automated but requires a bootstrap user-assigned managed identity that already has AppRoleAssignment.ReadWrite.All on Microsoft Graph.",
+                  "style": "Warning"
+                }
+              },
+              {
+                "name": "graphPermsStrategy",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "Graph permissions grant strategy",
+                "defaultValue": "Post-deploy script (recommended)",
+                "toolTip": "Post-deploy: you run scripts/grant-graph-permissions.sh in Cloud Shell after this deploy completes, using your admin credentials. deploymentScripts: this template grants Graph perms automatically using a pre-provisioned bootstrap UAMI.",
+                "constraints": {
+                  "required": true,
+                  "allowedValues": [
+                    {
+                      "label": "Post-deploy script (recommended)",
+                      "value": "post-deploy"
+                    },
+                    {
+                      "label": "deploymentScripts (advanced — requires bootstrap UAMI)",
+                      "value": "deploymentScript"
+                    }
+                  ]
+                },
+                "visible": true
+              },
+              {
+                "name": "bootstrapUami",
+                "type": "Microsoft.Solutions.ResourceSelector",
+                "label": "Bootstrap user-assigned managed identity",
+                "toolTip": "Required when 'deploymentScripts' strategy is selected. Must already have the AppRoleAssignment.ReadWrite.All app role on Microsoft Graph. See docs/permissions.md for the one-time setup.",
+                "resourceType": "Microsoft.ManagedIdentity/userAssignedIdentities",
+                "options": {
+                  "filter": {
+                    "subscription": "onBasics",
+                    "location": "all"
+                  }
+                },
+                "visible": "[equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript')]"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "parameters": {
+        "logicAppName": "[if(empty(steps('playbookSettings').logicAppName), concat('pa-mdi-disable-', substring(uniqueString(subscription().subscriptionId, resourceGroup().id), 0, 8)), steps('playbookSettings').logicAppName)]",
+        "location": "[location()]",
+        "sentinelWorkspaceResourceId": "[basics('sentinelWorkspace').id]",
+        "tags": {},
+        "actionsToEnable": "[steps('playbookSettings').actionsToEnable]",
+        "grantGraphPermissionsViaDeploymentScript": "[equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript')]",
+        "bootstrapManagedIdentityResourceId": "[if(equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript'), steps('playbookSettings').advancedSection.bootstrapUami.id, '')]"
+      }
+    }
+  }
+}

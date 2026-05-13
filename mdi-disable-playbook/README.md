@@ -36,15 +36,23 @@ Reference docs used to design this:
 
 ## Deploy to Azure (one-click)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2FcreateUiDefinition.json)
 
-> **Note**: the badge above points at `Lockbase-Cyber/Sentinel-Playbooks` on the `main` branch. If you fork to a different org, edit this URL accordingly.
+> **Note**: the badge above points at `Lockbase-Cyber/Sentinel-Playbooks` on the `main` branch. If you fork to a different org, edit BOTH `uri` (template) and `createUIDefinitionUri` (form definition) accordingly.
 
-The Azure portal renders a form from `infra/main.json`'s parameters.
+The Azure portal renders a guided form from [`infra/createUiDefinition.json`](infra/createUiDefinition.json):
 
-- **Required**: `sentinelWorkspaceResourceId` (full ARM ID of the Log Analytics workspace that hosts Sentinel).
-- **Optional**: `logicAppName`, `actionsToEnable` (defaults to `["disable","forcePasswordReset"]`), `tags`.
-- **Leave `grantGraphPermissionsViaDeploymentScript` set to `false`** (the default) unless you have already provisioned a bootstrap UAMI in the target subscription. See the [Advanced section](#advanced-fully-automated-graph-grant-via-deploymentscripts) below.
+- **Basics page**: subscription, resource group, region, and a **Sentinel workspace picker** (the only required custom input — pick the Log Analytics workspace Sentinel is onboarded to).
+- **Playbook settings page** (everything has sensible defaults):
+  - **Logic App name** — leave blank to auto-generate (`pa-mdi-disable-<8-char-hash>`).
+  - **Actions to enable** — multi-select; both `disable` and `forcePasswordReset` enabled by default.
+  - **Advanced section**: Graph permission grant strategy. Defaults to "Post-deploy script (recommended)" — no bootstrap MI required. Switch to `deploymentScripts` only if you have already provisioned a bootstrap user-assigned MI per the [Advanced section](#advanced-fully-automated-graph-grant-via-deploymentscripts) below; the form will then show a UAMI picker.
+
+If you prefer the raw Custom Deployment form (no createUiDefinition guidance), use this URL instead — every ARM parameter is exposed without grouping or pickers:
+
+```
+https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json
+```
 
 ## Prerequisites checklist
 
