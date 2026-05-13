@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "13273711482098586560"
+      "templateHash": "6950389709136962013"
     }
   },
   "parameters": {
@@ -92,7 +92,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "1031265886309913275"
+              "templateHash": "5306394098915261419"
             }
           },
           "parameters": {
@@ -626,11 +626,8 @@
               "kind": "V1",
               "properties": {
                 "displayName": "[format('{0} Sentinel (MI)', parameters('logicAppName'))]",
+                "customParameterValues": {},
                 "parameterValueType": "Alternative",
-                "parameterValueSet": {
-                  "name": "managedIdentityAuth",
-                  "values": {}
-                },
                 "api": {
                   "id": "[variables('sentinelManagedApiId')]"
                 }

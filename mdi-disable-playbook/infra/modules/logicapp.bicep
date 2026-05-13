@@ -25,6 +25,12 @@ var sentinelManagedApiId = subscriptionResourceId(
 )
 
 // API connection for Sentinel with managed-identity auth.
+//
+// The Sentinel managed API rejects connections that set BOTH
+// 'parameterValueType: Alternative' AND 'parameterValueSet' — it returns
+// InvalidApiConnectionApiReference at deploy time. We use the canonical
+// Microsoft-published Sentinel playbook shape: parameterValueType +
+// empty customParameterValues, no parameterValueSet.
 #disable-next-line BCP081
 resource sentinelConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
   name: '${logicAppName}-azuresentinel'
@@ -33,11 +39,8 @@ resource sentinelConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
   kind: 'V1'
   properties: {
     displayName: '${logicAppName} Sentinel (MI)'
+    customParameterValues: {}
     parameterValueType: 'Alternative'
-    parameterValueSet: {
-      name: 'managedIdentityAuth'
-      values: {}
-    }
     api: {
       id: sentinelManagedApiId
     }
