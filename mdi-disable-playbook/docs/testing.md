@@ -1,10 +1,12 @@
 # Testing
 
-Three gates: **pre-deploy** (static analysis on the template), **post-deploy smoke test** (read-only Graph call), and **end-to-end** (a real Sentinel incident driving a real MDI action against a real non-prod AD user).
+Three gates: **pre-deploy** (run locally before committing), **post-deploy smoke test** (read-only Graph call), and **end-to-end** (a real Sentinel incident driving a real MDI action against a real non-prod AD user).
+
+This repo has no CI — all pre-deploy gates run on your machine.
 
 ## Pre-deploy gates
 
-Run all three before opening a PR. The first two are also enforced in CI by `.github/workflows/validate.yml`.
+Run all of these before opening a PR.
 
 ### Bicep build clean (warnings-as-errors)
 
@@ -12,7 +14,7 @@ Run all three before opening a PR. The first two are also enforced in CI by `.gi
 az bicep build --file mdi-disable-playbook/infra/main.bicep --outdir mdi-disable-playbook/infra
 ```
 
-Expected: exit code 0 and no stderr. Any warning (BCP*, secure-output, etc.) blocks the PR. The build also regenerates `infra/main.json` — stage that in the same commit as any Bicep change, or the drift check will fail in CI.
+Expected: exit code 0 and no stderr. Any warning (BCP*, secure-output, etc.) is a blocker. The build also regenerates `infra/main.json` — stage it in the same commit as the Bicep change, or the next Deploy-to-Azure click will use a stale template.
 
 ### Workflow JSON schema validation
 
@@ -22,21 +24,24 @@ pwsh -File mdi-disable-playbook/infra/workflow/schema-validate.ps1
 
 Expected: `workflow.json: OK`. The script parses `workflow.json` and validates it against the Logic Apps Consumption workflow definition schema. It catches malformed expressions and unknown action types that the ARM deploy would otherwise surface as a runtime 400.
 
-### arm-ttk
+### arm-ttk (optional but recommended)
 
 ```powershell
+git clone --depth 1 https://github.com/Azure/arm-ttk.git $env:TEMP/arm-ttk
+Import-Module $env:TEMP/arm-ttk/arm-ttk/arm-ttk.psd1
 Test-AzTemplate -TemplatePath mdi-disable-playbook/infra/main.json
 ```
 
-Expected: all tests pass. The Azure Resource Manager template toolkit catches the standard family of template anti-patterns (hard-coded locations, missing description metadata, secure parameter leaks).
+Expected: all tests pass. The Azure Resource Manager template toolkit catches the standard family of template anti-patterns (hard-coded locations, missing description metadata, secure parameter leaks). Skip if you're in a hurry — `az deployment group what-if` catches the most important issues at deploy time.
 
 ### `az deployment group what-if`
 
 ```powershell
+$workspaceId = "/subscriptions/<SUB>/resourceGroups/<WS-RG>/providers/Microsoft.OperationalInsights/workspaces/<WS-NAME>"
 az deployment group what-if `
   -g <RG> `
   --template-file mdi-disable-playbook/infra/main.json `
-  --parameters @mdi-disable-playbook/infra/parameters/dev.parameters.json
+  --parameters sentinelWorkspaceResourceId=$workspaceId
 ```
 
 Expected output set:
@@ -150,25 +155,27 @@ The implementation work (Tasks 1–11) was completed unattended on this date. Ta
 
 Before wiring an Automation Rule against any production-scope Sentinel incidents, run the full E2E exactly once in the sandbox. The steps below assume the operator is logged into the sandbox subscription and has `Contributor` on the target resource group.
 
-1. **Replace `REPLACE_ME` markers** in `infra/parameters/dev.parameters.json` (subscription ID, resource group, workspace resource ID, bootstrap UAMI resource ID if using the deploymentScript path).
-2. **Verify the Deploy-to-Azure badge URL** in `mdi-disable-playbook/README.md` points at the correct fork (currently `Lockbase-Cyber/Sentinel-Playbooks` on `main`). If you forked elsewhere, update accordingly.
-3. **Configure GitHub OIDC federation** per [README — GitHub Actions deploy](../README.md) (Entra app, federated credentials for `main` branch and `pull_request`, Contributor on the RG).
-4. **Set GitHub repo variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `RESOURCE_GROUP_NAME`.
-5. **Trigger the `Deploy` workflow** with `workflow_dispatch` → environment `dev`. Confirm post-deploy verification prints `State: Enabled` and outputs the MI principal ID.
-6. **Grant Graph permissions** to the Logic App MI via `scripts/grant-graph-permissions.sh` in Cloud Shell (or `.ps1` locally). Verify with:
+1. **Verify the Deploy-to-Azure badge URL** in `mdi-disable-playbook/README.md` points at the correct fork (currently `Lockbase-Cyber/Sentinel-Playbooks` on `main`). If you forked elsewhere, update both the `uri` and `createUIDefinitionUri` segments accordingly.
+2. **Click the Deploy-to-Azure badge** (or run the manual `az deployment group create` command from the README). On the basics page, pick the subscription, resource group, and Sentinel-onboarded Log Analytics workspace. Accept the defaults on the Playbook settings page.
+3. **After the deployment succeeds**, fetch the Logic App's managed-identity principal ID:
+   ```bash
+   az deployment group show -g <RG> -n <DEPLOYMENT-NAME> \
+     --query properties.outputs.managedIdentityPrincipalId.value -o tsv
+   ```
+4. **Grant Graph permissions** to the Logic App MI via `scripts/grant-graph-permissions.sh` in Cloud Shell (or `.ps1` locally). Verify with:
    ```bash
    az rest --method GET \
      --uri "https://graph.microsoft.com/v1.0/servicePrincipals/<MI_PRINCIPAL_ID>/appRoleAssignments"
    ```
    Expect both `SecurityIdentitiesAccount.Read.All` and `SecurityIdentitiesUserActions.ReadWrite.All` in the response.
-7. **Assign MDI URBAC role** in the Defender portal per [permissions.md](./permissions.md). Wait ~5 minutes for propagation.
-8. **Run `test-invoke.ps1`** against a known test SID:
+5. **Assign MDI URBAC role** in the Defender portal per [permissions.md](./permissions.md). Wait ~5 minutes for propagation.
+6. **Run `test-invoke.ps1`** against a known test SID:
    ```powershell
    pwsh -File mdi-disable-playbook/scripts/test-invoke.ps1 -TestSid "S-1-5-21-...-1234"
    ```
    Confirm the response shape matches what the workflow expects.
-9. **Fire the synthetic incident** via Path A or Path B above. Verify all four checks under "Verification" (run history, incident comment, Defender Action Center, on-prem AD).
-10. **Rollback** the test account per the Rollback section.
-11. **Record results here.** Replace this checklist with the actual run log, including: sandbox subscription ID, test user identifier (no SID in the committed log — PII), date/time, run-trace branch hit (`BySid` / `ByAad`), Action Center actor + verbs, on-prem AD state delta.
+7. **Fire the synthetic incident** via Path A or Path B above. Verify all four checks under "Verification" (run history, incident comment, Defender Action Center, on-prem AD).
+8. **Rollback** the test account per the Rollback section.
+9. **Record results here.** Replace this checklist with the actual run log, including: sandbox subscription ID, test user identifier (no SID in the committed log — PII), date/time, run-trace branch hit (`BySid` / `ByAad`), Action Center actor + verbs, on-prem AD state delta.
 
 Until this section is updated with a real run log, **do not** wire an Automation Rule to non-test analytics rules.

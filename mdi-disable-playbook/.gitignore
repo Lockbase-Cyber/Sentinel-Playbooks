@@ -1,5 +1,5 @@
 # NOTE: infra/main.json IS committed (it's the Deploy-to-Azure button target).
-# CI enforces it stays in sync with main.bicep via the drift check in validate.yml.
+# Keep it in sync with main.bicep by re-running `az bicep build` before commit.
 
 # Local Azure CLI artifacts
 .azure/

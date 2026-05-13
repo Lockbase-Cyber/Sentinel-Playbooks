@@ -17,7 +17,7 @@ This document covers the four permission grants the MI needs and how each one is
 
 `infra/modules/roleAssignments.bicep` declares a `Microsoft.Authorization/roleAssignments` for the role definition `ab8e14d6-...` (Sentinel Responder) at the **resource group** scope, with `principalId = managedIdentityPrincipalId` of the Logic App. This is what allows the workflow to write `Add_comment_to_incident` against the Sentinel `Incidents - Comment` endpoint.
 
-The role assignment requires the **deploying principal** (the OIDC GitHub Actions app, or the user running `az deployment group create` manually) to hold `Owner` or `User Access Administrator` on the target resource group. Without that, the deploy fails at this resource with a 403 — the rest of the resources will already have created, leaving you in a partial state. Run the deploy as a principal with role-assignment rights.
+The role assignment requires the **deploying principal** (the user signed into the Azure portal when clicking the Deploy-to-Azure button, or whoever runs `az deployment group create` manually) to hold `Owner` or `User Access Administrator` on the target resource group. Without that, the deploy fails at this resource with a 403 — the rest of the resources will already have been created, leaving you in a partial state. Sign in as a principal with role-assignment rights before deploying.
 
 Verification:
 
