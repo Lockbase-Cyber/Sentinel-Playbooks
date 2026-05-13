@@ -46,8 +46,7 @@ az deployment group what-if `
 
 Expected output set:
 - One `Microsoft.Logic/workflows` (`Create` on first deploy, `Modify`/`NoChange` on subsequent).
-- One `Microsoft.Web/connections` (`azuresentinel`).
-- One `Microsoft.Logic/workflows/accessPolicies` (child of the workflow).
+- One `Microsoft.Web/connections` (`azuresentinel`, `kind: V1`, MI-auth via `parameterValueType: Alternative`).
 - One `Microsoft.Authorization/roleAssignments` (Sentinel Responder at RG scope).
 - Optionally one `Microsoft.Resources/deploymentScripts` (only when `grantGraphPermissionsViaDeploymentScript = true`).
 

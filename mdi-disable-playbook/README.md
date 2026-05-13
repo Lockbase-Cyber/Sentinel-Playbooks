@@ -36,7 +36,7 @@ Reference docs used to design this:
 
 ## Deploy to Azure (one-click)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json%3Fv%3D5/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2FcreateUiDefinition.json%3Fv%3D5)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2Fmain.json%3Fv%3D6/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FLockbase-Cyber%2FSentinel-Playbooks%2Fmain%2Fmdi-disable-playbook%2Finfra%2FcreateUiDefinition.json%3Fv%3D6)
 
 > **Note**: the badge above points at `Lockbase-Cyber/Sentinel-Playbooks` on the `main` branch. If you fork to a different org, edit BOTH `uri` (template) and `createUIDefinitionUri` (form definition) accordingly.
 
