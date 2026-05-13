@@ -24,8 +24,13 @@ jobs:
         run: |
           pwsh -File infra/workflow/schema-validate.ps1
 
-      - name: Set up Azure CLI (for bicep)
-        uses: azure/setup-azure-cli@v2
+      - name: Ensure az + bicep are current
+        run: |
+          set -e
+          az --version
+          az bicep install
+          az bicep upgrade
+          az bicep version
 
       - name: Bicep build (treat warnings as errors) to a scratch path
         run: |
@@ -51,10 +56,30 @@ jobs:
           # Make the fresh build the artifact for arm-ttk to consume.
           cp /tmp/main.fresh.json infra/main.json
 
-      - name: arm-ttk
-        uses: Azure/arm-ttk-action@v1
-        with:
-          path: mdi-disable-playbook/infra/main.json
+      - name: arm-ttk (clone + Test-AzTemplate)
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path /tmp/arm-ttk)) {
+            git clone --depth 1 https://github.com/Azure/arm-ttk.git /tmp/arm-ttk
+          }
+          Import-Module /tmp/arm-ttk/arm-ttk/arm-ttk.psd1
+
+          $results = Test-AzTemplate -TemplatePath mdi-disable-playbook/infra/main.json
+          $failures = @($results | Where-Object { -not $_.Passed })
+
+          # Print full results for the run log.
+          $results | Format-List Name, Passed, File
+
+          if ($failures.Count -gt 0) {
+            Write-Host "::error::arm-ttk reported $($failures.Count) failures"
+            $failures | ForEach-Object {
+              Write-Host "::error file=$($_.File)::$($_.Name): $($_.Errors -join '; ')"
+            }
+            exit 1
+          }
+          Write-Host "arm-ttk: all $($results.Count) tests passed"
 
       - name: Lint parameter files
         shell: pwsh
