@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'mdi-disable-playbook/infra/**'
-      - 'mdi-disable-playbook/.github/workflows/deploy.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       environment:
@@ -36,8 +36,13 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Set up Azure CLI
-        uses: azure/setup-azure-cli@v2
+      - name: Ensure az + bicep are current
+        run: |
+          set -e
+          az --version
+          az bicep install
+          az bicep upgrade
+          az bicep version
 
       - name: Re-build main.json (fail fast if drifted from committed)
         run: |
