@@ -123,26 +123,28 @@ The workflow never logs full SIDs at INFO level. Specifically:
 
 If you add diagnostic settings or a custom log sink, do **not** lift `outputs('Compose_sid')` into a separate Compose action whose name reads like a logging line. The current shape is intentional.
 
-## Engineering workarounds (Bicep)
+## Engineering notes
 
-Two non-obvious deviations from the "obvious" Bicep shape were applied during Task 3. Both preserve downstream behavior; they are documented here so a future maintainer doesn't "clean them up" and break the deployment.
+### No `accessPolicies` child on the Sentinel API connection
 
-### `accessPolicies` split into a child module
+`Microsoft.Web/connections/accessPolicies` is only supported on **V2** API connections. Our `kind: 'V1'` connection (which is what every published Microsoft Sentinel playbook uses, including Azure/Azure-Sentinel and Azure/Microsoft-Defender-for-Cloud samples) rejects an `accessPolicies` child at deploy time with `InvalidApiConnectionAccessPolicy`. We do not need one.
 
-The Logic App's `accessPolicies` sub-resource was originally inline on the parent `Microsoft.Logic/workflows` resource. The Bicep compiler emitted **BCP120** (`The property must be a compile-time constant. Properties of resources that have not yet been deployed cannot be used as variables.`) because the access-policy name depended on a value derived from the Logic App's identity, which isn't known at compile time.
+The Logic App's managed identity is authorized to use the connection via two cooperating settings, both already in place:
+- The connection itself sets `properties.parameterValueType: 'Alternative'` (with empty `customParameterValues`), which tells the connector "this connection uses managed-identity auth, not OAuth".
+- The Logic App's `parameters.$connections.value.azuresentinel.connectionProperties.authentication.type = 'ManagedServiceIdentity'` tells the runtime to authenticate as the Logic App's system-assigned MI when invoking the connection.
 
-**Fix**: the access-policy resource was extracted into `infra/modules/logicapp.accessPolicy.bicep` as a child module taking the parent name + the principal id as parameters. The module declares the `Microsoft.Logic/workflows/accessPolicies` resource standalone, and `main.bicep` invokes it after the parent Logic App is declared. Same ARM result, BCP120-clean.
+The combination is exactly what the canonical Microsoft Sentinel playbooks (RecordedFuture-Alert-Importer, AttackPath-Sentinel-Incident-Enrich, etc.) ship in production. An access-policy resource was tried during initial implementation and rejected by the platform.
 
-### `forceUpdateTag: utcNow()` moved to a param default
+### `apiVersion: 2016-06-01` on `Microsoft.Web/connections`
 
-`Microsoft.Resources/deploymentScripts.properties.forceUpdateTag` was set inline to `utcNow()` to force a re-run on every deploy. The compiler emitted **BCP065** (`Function "utcNow" is not valid at this location. It can only be used as a parameter default value.`) because `utcNow()` is only legal at parameter default position, not in resource property bodies.
+The stable `2016-06-01` API version is the one Microsoft's own production Sentinel templates use. The `2018-07-01-preview` version revalidates `parameterValueType: 'Alternative'` differently and rejects connections that the stable version accepts. Bicep's type metadata for `2016-06-01` predates `kind` and `parameterValueType` on this resource, so build emits BCP037/BCP187 warnings — suppressed inline because the runtime accepts these properties as the official samples prove.
 
-**Fix**: `graphPermissions.bicep` now declares a parameter:
+### `forceUpdateTag: utcNow()` as a parameter default
+
+`Microsoft.Resources/deploymentScripts.properties.forceUpdateTag` is set inline to `utcNow()` to force a re-run on every deploy. The Bicep compiler emits **BCP065** (`Function "utcNow" is not valid at this location. It can only be used as a parameter default value.`) if used directly. `graphPermissions.bicep` declares it as a parameter:
 
 ```bicep
 param forceUpdateTag string = utcNow()
 ```
 
-and the `forceUpdateTag` property references the parameter. The behavior is identical (each deployment recomputes the default value at template-evaluation time, forcing a re-run), the compile is clean.
-
-Both deviations are tracked in the commit history; they are not regressions to revert.
+and the resource property references the parameter. Behavior is identical (each deployment recomputes the default at template-evaluation time, forcing a re-run); the compile is clean.

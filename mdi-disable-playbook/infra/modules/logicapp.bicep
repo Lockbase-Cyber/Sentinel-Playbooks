@@ -85,20 +85,15 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
   }
 }
 
-// Grant the Logic App MI access to the Sentinel API connection so it can
-// authenticate as the MI when the trigger fires and when commenting back.
-// The accessPolicies child resource is deployed via a nested module so that
-// the Logic App's system-assigned principalId (only known at deployment time)
-// can satisfy Bicep's "name must be calculable at start" rule (BCP120).
-module sentinelConnAccessPolicy 'logicapp.accessPolicy.bicep' = {
-  name: '${logicAppName}-sentinelAccessPolicy'
-  params: {
-    connectionName: sentinelConnection.name
-    location: location
-    principalId: logicApp.identity.principalId
-    tenantId: subscription().tenantId
-  }
-}
+// No Microsoft.Web/connections/accessPolicies child resource here:
+// access policies are only supported on V2 API connections, and our
+// kind='V1' connection rejects them at deploy time
+// (InvalidApiConnectionAccessPolicy). The Logic App's MI auth on the
+// Sentinel connector is established by the connection's
+// parameterValueType='Alternative' plus the Logic App's
+// $connections.azuresentinel.connectionProperties.authentication.type =
+// 'ManagedServiceIdentity' — matches the canonical Microsoft Sentinel
+// playbook samples (Azure/Azure-Sentinel, Azure/Microsoft-Defender-for-Cloud).
 
 output logicAppResourceId string = logicApp.id
 output logicAppName string = logicApp.name
