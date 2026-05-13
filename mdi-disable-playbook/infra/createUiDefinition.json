@@ -152,7 +152,7 @@
       }
     ],
     "outputs": {
-      "logicAppName": "[if(empty(steps('playbookSettings').logicAppName), concat('pa-mdi-disable-', substring(uniqueString(subscription().subscriptionId, resourceGroup().id), 0, 8)), steps('playbookSettings').logicAppName)]",
+      "logicAppName": "[if(empty(steps('playbookSettings').logicAppName), concat('pa-mdi-disable-', substring(replace(guid(), '-', ''), 0, 8)), steps('playbookSettings').logicAppName)]",
       "location": "[location()]",
       "sentinelWorkspaceResourceId": "[basics('sentinelWorkspace').id]",
       "tags": {},
