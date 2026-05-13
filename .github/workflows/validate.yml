@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'mdi-disable-playbook/infra/**'
-      - 'mdi-disable-playbook/.github/workflows/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: read

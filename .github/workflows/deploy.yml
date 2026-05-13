@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'mdi-disable-playbook/infra/**'
-      - 'mdi-disable-playbook/.github/workflows/deploy.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       environment:
