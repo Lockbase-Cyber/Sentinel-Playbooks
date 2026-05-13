@@ -11,12 +11,12 @@ param principalId string
 param tenantId string = subscription().tenantId
 
 #disable-next-line BCP081
-resource existingConnection 'Microsoft.Web/connections@2018-07-01-preview' existing = {
+resource existingConnection 'Microsoft.Web/connections@2016-06-01' existing = {
   name: connectionName
 }
 
 #disable-next-line BCP081
-resource sentinelConnAccessPolicy 'Microsoft.Web/connections/accessPolicies@2018-07-01-preview' = {
+resource sentinelConnAccessPolicy 'Microsoft.Web/connections/accessPolicies@2016-06-01' = {
   parent: existingConnection
   name: principalId
   location: location
