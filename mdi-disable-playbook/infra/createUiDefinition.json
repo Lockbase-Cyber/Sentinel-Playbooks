@@ -152,15 +152,13 @@
       }
     ],
     "outputs": {
-      "parameters": {
-        "logicAppName": "[if(empty(steps('playbookSettings').logicAppName), concat('pa-mdi-disable-', substring(uniqueString(subscription().subscriptionId, resourceGroup().id), 0, 8)), steps('playbookSettings').logicAppName)]",
-        "location": "[location()]",
-        "sentinelWorkspaceResourceId": "[basics('sentinelWorkspace').id]",
-        "tags": {},
-        "actionsToEnable": "[steps('playbookSettings').actionsToEnable]",
-        "grantGraphPermissionsViaDeploymentScript": "[equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript')]",
-        "bootstrapManagedIdentityResourceId": "[if(equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript'), steps('playbookSettings').advancedSection.bootstrapUami.id, '')]"
-      }
+      "logicAppName": "[if(empty(steps('playbookSettings').logicAppName), concat('pa-mdi-disable-', substring(uniqueString(subscription().subscriptionId, resourceGroup().id), 0, 8)), steps('playbookSettings').logicAppName)]",
+      "location": "[location()]",
+      "sentinelWorkspaceResourceId": "[basics('sentinelWorkspace').id]",
+      "tags": {},
+      "actionsToEnable": "[steps('playbookSettings').actionsToEnable]",
+      "grantGraphPermissionsViaDeploymentScript": "[equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript')]",
+      "bootstrapManagedIdentityResourceId": "[if(equals(steps('playbookSettings').advancedSection.graphPermsStrategy, 'deploymentScript'), steps('playbookSettings').advancedSection.bootstrapUami.id, '')]"
     }
   }
 }

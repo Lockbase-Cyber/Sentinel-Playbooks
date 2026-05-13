@@ -125,33 +125,19 @@ The deployment registers the Logic App with Sentinel but does **not** subscribe 
 3. **Conditions**: at minimum, scope by the analytics rule(s) you trust to fire high-confidence detections that produce an `Account` entity. Auto-disable on a low-confidence detection will burn you.
 4. **Action**: `Run playbook` → select the Logic App created by this deployment.
 
-## GitHub Actions deploy (IaC-driven path)
-
-For repeatable deployments (recommended once you've validated in-portal):
-
-1. **Fork** the repo.
-2. Configure the target subscription's Entra app for OIDC. Set the federated credentials for `repo:<owner>/<repo>:ref:refs/heads/main` and `repo:<owner>/<repo>:pull_request`.
-3. Set GitHub Actions **repository variables** (not secrets — the whole point of OIDC):
-   - `AZURE_CLIENT_ID`
-   - `AZURE_TENANT_ID`
-   - `AZURE_SUBSCRIPTION_ID`
-   - `RESOURCE_GROUP_NAME`
-4. Edit `infra/parameters/dev.parameters.json` and `infra/parameters/prod.parameters.json` to replace each `REPLACE_ME` marker — including `bootstrapManagedIdentityResourceId` if you've set `grantGraphPermissionsViaDeploymentScript = true`.
-5. Push to `main`. The `Deploy` workflow runs and prints `State: Enabled` plus the MI principal ID on success.
-
-PR validation (`.github/workflows/validate.yml`) runs on every PR: Bicep build with warnings-as-errors, drift check between `main.bicep` and the committed `main.json`, arm-ttk, and JSON schema validation on `workflow.json`.
-
 ## Manual deploy via Azure CLI
 
-If you don't want GitHub Actions in the loop:
+If you'd rather not click the portal button — for example, scripting a sandbox deploy:
 
 ```powershell
 az bicep build --file mdi-disable-playbook/infra/main.bicep --outdir mdi-disable-playbook/infra
 az deployment group create `
   -g <RG> `
   --template-file mdi-disable-playbook/infra/main.json `
-  --parameters @mdi-disable-playbook/infra/parameters/dev.parameters.json
+  --parameters sentinelWorkspaceResourceId=/subscriptions/<SUB>/resourceGroups/<WORKSPACE-RG>/providers/Microsoft.OperationalInsights/workspaces/<WORKSPACE-NAME>
 ```
+
+Add `--parameters grantGraphPermissionsViaDeploymentScript=true bootstrapManagedIdentityResourceId=/subscriptions/.../userAssignedIdentities/<NAME>` if you want the automated Graph-permission grant path (see Advanced section below).
 
 Followed by the two post-deploy steps above (Graph permissions, MDI URBAC role, Automation Rule).
 
@@ -180,15 +166,16 @@ See [docs/testing.md](./docs/testing.md) for the pre-deploy gates (Bicep build c
 
 ## Contributing
 
-- **PR validation** (`.github/workflows/validate.yml`) runs on every pull request:
-  - `az bicep build` with warnings-as-errors.
-  - Drift check between `infra/main.bicep` and the committed `infra/main.json`.
-  - arm-ttk.
-  - JSON schema validation on `infra/workflow/workflow.json` via `infra/workflow/schema-validate.ps1`.
-- **Before committing Bicep changes**, always run:
+This repo intentionally has **no CI**. The Deploy-to-Azure button reads `infra/main.json` directly from `main`, so the contributor discipline is simple: keep `main.json` in sync with `main.bicep`.
+
+- **Before committing any Bicep change**, run:
   ```powershell
   az bicep build --file mdi-disable-playbook/infra/main.bicep --outdir mdi-disable-playbook/infra
   ```
-  and stage the regenerated `main.json` alongside the Bicep delta. PRs that fail the drift check will not merge.
-- **Conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`, etc.) — used by the squash-merge changelog flow.
+  Stage the regenerated `main.json` in the same commit as the Bicep delta. Forgetting this step ships a broken Deploy-to-Azure button.
+- **Validate the workflow JSON** when you touch `infra/workflow/workflow.json`:
+  ```powershell
+  pwsh -File mdi-disable-playbook/infra/workflow/schema-validate.ps1
+  ```
+- **Conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`) — keeps the squash-merge history scannable.
 - **No secrets in source.** The whole design is managed-identity-first. If you find yourself reaching for an app registration with a client secret, stop and re-read [docs/permissions.md](./docs/permissions.md).
