@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "17232840269987193379"
+      "templateHash": "8177843199713565997"
     }
   },
   "parameters": {
@@ -92,7 +92,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "9774337561868263883"
+              "templateHash": "9202229857337193047"
             }
           },
           "parameters": {
@@ -283,16 +283,16 @@
                                       "authentication": {
                                         "type": "ManagedServiceIdentity",
                                         "audience": "https://graph.microsoft.com"
+                                      },
+                                      "retryPolicy": {
+                                        "type": "exponential",
+                                        "count": 3,
+                                        "interval": "PT30S",
+                                        "minimumInterval": "PT10S",
+                                        "maximumInterval": "PT2M"
                                       }
                                     },
-                                    "runAfter": {},
-                                    "retryPolicy": {
-                                      "type": "exponential",
-                                      "count": 3,
-                                      "interval": "PT30S",
-                                      "minimumInterval": "PT10S",
-                                      "maximumInterval": "PT2M"
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Set_matches_from_sid": {
                                     "type": "SetVariable",
@@ -324,16 +324,16 @@
                                       "authentication": {
                                         "type": "ManagedServiceIdentity",
                                         "audience": "https://graph.microsoft.com"
+                                      },
+                                      "retryPolicy": {
+                                        "type": "exponential",
+                                        "count": 3,
+                                        "interval": "PT30S",
+                                        "minimumInterval": "PT10S",
+                                        "maximumInterval": "PT2M"
                                       }
                                     },
-                                    "runAfter": {},
-                                    "retryPolicy": {
-                                      "type": "exponential",
-                                      "count": 3,
-                                      "interval": "PT30S",
-                                      "minimumInterval": "PT10S",
-                                      "maximumInterval": "PT2M"
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Filter_aad_subaccount_match": {
                                     "description": "Keep identityAccounts where any sub-account is provider==EntraID with identifier matching the AadUserId from the incident entity.",
@@ -429,14 +429,14 @@
                                               "authentication": {
                                                 "type": "ManagedServiceIdentity",
                                                 "audience": "https://graph.microsoft.com"
+                                              },
+                                              "retryPolicy": {
+                                                "type": "exponential",
+                                                "count": 3,
+                                                "interval": "PT30S",
+                                                "minimumInterval": "PT10S",
+                                                "maximumInterval": "PT2M"
                                               }
-                                            },
-                                            "retryPolicy": {
-                                              "type": "exponential",
-                                              "count": 3,
-                                              "interval": "PT30S",
-                                              "minimumInterval": "PT10S",
-                                              "maximumInterval": "PT2M"
                                             }
                                           },
                                           "Append_action_result": {
